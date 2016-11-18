@@ -86,28 +86,28 @@ class EDA:
 		else:
 			return type(var)
 
-	def identify_variable_data_type(self, key):
-		distinct = self.getDistinct(key)
+	def identify_variable_data_type(self, key, collname):
+		distinct = self.get_distinct(key,collname)
 		value = distinct[random.randint(0,len(distinct))]
 		if value and value not in self.missing_types:
 			return self.checkDataType(value)
 		return None
 
-	def identify_variable_type(self, key):
+	def identify_variable_type(self, key, collname):
 		'''
 		Variable Identification - Continuous or Categorical
 		'''
 		
-		distinct_count = self.getDistinctCount(key)
-		total_count = self.getTotalCount(key)
+		distinct_count = self.get_distinct_count(key,collname)
+		total_count = self.get_total_count(key,collname)
 		ratio_unique = round((float(distinct_count) / total_count) * 100,2)
-		if ratio_unique > 0.5:
+		# print ratio_unique
+		if ratio_unique < 5.0:
 			return "Categorical"
 		else:
 			return "Continuous"
 
-
-	def univariate_analysis(self, key, group_key, collname, limit = False, sorting_order = "DESC", central_tendencies = True):
+	def univariate_analysis(self, key, collname, limit = False, sorting_order = "DESC", central_tendencies = True):
 		''' 
 		Variable Analysis - Univariate 
 
@@ -120,7 +120,6 @@ class EDA:
 		limit: Number of documents / rows to be analysed, Default is False (all documents)
 		sorting_order: Arranging the results in asending or descending order (ASEC or DESC)
 		central_tendencies: Boolean, True if you want to include mean, median and mode in the results
-
 		'''
 
 		sorter = -1
@@ -128,26 +127,28 @@ class EDA:
 			sorter = 1
 
 		if central_tendencies:
-			pipe = [{'$group' : {'_id' : '$'+key, 'freq' : {'$sum':'$'+group_key}, 'mean':{'$avg':'$'+group_key}, 'min':{'$min':'$'+group_key}, 'max':{'$max':'$'+group_key}}}, 
-					{'$sort':{'freq':sorter}}]
+			pipe = [{'$group' : {'_id' : key, 'sum' : {'$sum':'$'+key}, 'mean':{'$avg':'$'+key},\
+					'min':{'$min':'$'+key}, 'max':{'$max':'$'+key}}},{'$sort':{'sum':sorter}}]
 		else:
-			pipe = [{'$group' : {'_id' : '$'+key, 'freq' : {'$sum':'$'+group_key}}},
-					{'$sort':{'freq':sorter}}]
-
+			pipe = [{'$group' : {'_id' : '$'+key, 'freq' : {'$sum':1}}},
+					{'$sort':{'sum':sorter}}]
 		if limit:
 			pipe.append({'$limit':limit})
+
 		res = db[collname].aggregate(pipe)
 		res = self.cursor_to_list(res)
-		print res
-		return res 
+		# ret = { key : res[0]}
+		# print ret
+		# print res
+		return res
 
-	def get_distinct(self, key):
+	def get_distinct(self, key, collname):
 		return db[collname].distinct(key)
 
-	def get_distinct_count(self, key):
-		return len(self.getDistinct(key))
+	def get_distinct_count(self, key, collname):
+		return len(self.get_distinct(key,collname))
 
-	def get_total_count(self, key):
+	def get_total_count(self, key, collname):
 		return db[collname].find().count()
 
 	def cursor_to_list(self, cursor):
@@ -169,7 +170,7 @@ class EDA:
 		# distincts = self.getDistinct(key)
 
 
-	def bivariate_analysis(self, key1, key2, group_key, collname, limit = False, sorting_order = "DESC"):
+	def bivariate_analysis(self, key1, key2, collname, limit = False, sorting_order = "DESC"):
 		''' 
 		Variable Analysis - BiVariate 
 
@@ -182,19 +183,35 @@ class EDA:
 		limit: Number of documents / rows to be analysed, Default is False (all documents)
 		sorting_order: Arranging the results in asending or descending order (ASEC or DESC)
 		'''
+		type_key1 = self.identify_variable_type(key1,collname)
+		type_key2 = self.identify_variable_type(key2,collname)
+		if type_key1 == 'Continuous' and type_key2 == 'Continuous':
+			pipe1 = [{'$group':{'_id' :key1, 'key1StdDev': { '$stdDevSamp': '$'+key1 }}}]
+			pipe2 = [{'$group':{'_id' :key2, 'key2StdDev': { '$stdDevSamp': '$'+key2 }}}]
+			std_key1 = db[collname].aggregate(pipe1)
+			std_key2 = db[collname].aggregate(pipe2)
+			# print self.cursor_to_list(std_key1)
+			# print self.cursor_to_list(std_key2)
+		elif key1 == 'Categorical' and key2 == 'Categorical':
+			pass
+		else:
+			pass
 
-		sorter = -1
+ 		sorter = -1
 		if sorting_order != "DESC":
 			sorter = 1
 
-		pipe = [{'$group' : {'_id' : {'key1':'$'+key1,'key2':'$'+key2}, 'freq' : {'$sum':'$'+group_key}, 'mean':{'$avg':'$'+group_key}, 'min':{'$min':'$'+group_key}, 'max':{'$max':'$'+group_key} }}, 
-				{'$sort':{'freq':sorter}}]
-		if limit:
-			pipe.append({'$limit':limit})
+		# pipe = [{'$group' : {'_id' : {'key1':'$'+key1,'key2':'$'+key2}, 'sum' : {'$sum':'$'+group_key}, 'mean':{'$avg':'$'+group_key}, 'min':{'$min':'$'+group_key}, 'max':{'$max':'$'+group_key} }}, 
+		# 		{'$sort':{'sum':sorter}}]
+
+		# pipe = [{'$group' : {'_id' : '$'+group_key, ''}}]
+		# if limit:
+		# 	pipe.append({'$limit':limit})
 	
-		res = db[collname].aggregate(pipe)
-		res = self.cursor_to_list(res)
-		print res
+		# res = db[collname].aggregate(pipe)
+		# res = self.cursor_to_list(res)
+		res = ''
+		# print res
 		return res 
 
 	def createBins(self, listofdicts, key, window_size, scaler):
@@ -319,9 +336,9 @@ class Visualize:
 		print key + "\tFreq\tMin\tMax\tMean"
 		for each in listofdicts:
 			if "min" in each:
-				print str(each['_id']) +"\t"+ str(each['freq']) + "\t" + str(each['min'])+ "\t" + str(each['max'])+ "\t" + str(each['mean'])
+				print str(each['_id']) +"\t"+ str(each['sum']) + "\t" + str(each['min'])+ "\t" + str(each['max'])+ "\t" + str(each['mean'])
 			else:
-				print str(each['_id']) +"\t"+ str(each['freq'])
+				print str(each['_id']) +"\t"+ str(each['sum'])
 
 
 	def createBiTable(self, listofdicts, key1, key2):
@@ -330,7 +347,7 @@ class Visualize:
 			if "key1" not in each['_id'] or "key2" not in each['_id']:
 				continue
 			
-			print str(each['_id']['key1']) +"\t"+ str(each['_id']['key2']) +"\t"+ str(each['freq']) + "\t" + str(each['min'])+ "\t" + str(each['max'])+ "\t" + str(each['mean'])
+			print str(each['_id']['key1']) +"\t"+ str(each['_id']['key2']) +"\t"+ str(each['sum']) + "\t" + str(each['min'])+ "\t" + str(each['max'])+ "\t" + str(each['mean'])
 
 
 	def printBinsTable(self, bins, key, window_size):
@@ -383,7 +400,7 @@ get = Get()
 eda = EDA()
 vis = Visualize()
 
-# print eda.identifyVariableType('grade')
+# print eda.identify_variable_type('PetalWidth','irisdata')
 # print eda.Univariate('annual_inc')
 
 # window_size = 50
