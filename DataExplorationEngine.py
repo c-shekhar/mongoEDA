@@ -166,10 +166,50 @@ class EDA:
 			return db[collname].find({key:missing_type}).count()
 
 	# Complete This Function
-	# def getOutliers(self, key, threshold):
-		# distincts = self.getDistinct(key)
+	def get_outliers(self, key, collname, thresholds = [0.05,0.95]):
+		docs = self.cursor_to_list(Get().get_documents(collname))
+		key_docs = [doc[key] for doc in docs]
+		q1 = self.get_pth_quantile(key_docs,thresholds[0])
+		q2 = self.get_pth_quantile(key_docs,thresholds[1])
+		print q1,q2,key_docs
+		if any(not((q1 < val) and (val < q2)) for val in key_docs):
+			return True
+		return False
+	
+	def get_pth_quantile(self, x, p):
+		p_index = int(p * len(x))
+		return sorted(x)[p_index]
+	
+	def de_mean(self, key, collname):
+		'''
+			function to return the difference of list values and their mean
+		'''
+	
+		list_key=db[collname].find()
+		list_dict=self.cursor_to_list(list_key)
+		pipe = [{'$group' : {'_id' : key, 'mean':{'$avg':'$'+key}}}]
+		mean = db[collname].aggregate(pipe)
+		mean=self.cursor_to_list(mean)
+		mean=mean[0]['mean']
+		print 'mean',mean
+		print [each[key] for each in list_dict]
+		return [(each[key]-mean) for each in list_dict]
 
 
+	def dot(self, list1, list2):
+		'''
+			dot product of two vectors
+		'''
+		return sum([ u*v for u,v in zip(list1,list2)])
+
+	def get_std_dev(self, key, collname):
+		'''
+			function to return  the standard deviation for a key
+		'''
+		pipe = [{'$group':{'_id' :key, 'keyStdDev': { '$stdDevSamp': '$'+key }}}]
+		std_dev=self.cursor_to_list(db[collname].aggregate(pipe))[0]['keyStdDev']
+		return std_dev
+	
 	def bivariate_analysis(self, key1, key2, collname, limit = False, sorting_order = "DESC"):
 		''' 
 		Variable Analysis - BiVariate 
@@ -186,12 +226,13 @@ class EDA:
 		type_key1 = self.identify_variable_type(key1,collname)
 		type_key2 = self.identify_variable_type(key2,collname)
 		if type_key1 == 'Continuous' and type_key2 == 'Continuous':
-			pipe1 = [{'$group':{'_id' :key1, 'key1StdDev': { '$stdDevSamp': '$'+key1 }}}]
-			pipe2 = [{'$group':{'_id' :key2, 'key2StdDev': { '$stdDevSamp': '$'+key2 }}}]
-			std_key1 = db[collname].aggregate(pipe1)
-			std_key2 = db[collname].aggregate(pipe2)
-			# print self.cursor_to_list(std_key1)
-			# print self.cursor_to_list(std_key2)
+			std_dev_key1=self.get_std_dev(key1,collname)
+			std_dev_key2=self.get_std_dev(key2,collname)
+			freq=db[collname].find().count()
+			cov_key1_key2=self.dot(self.de_mean(key1,collname),self.de_mean(key2,collname))/(freq-1)
+			print cov_key1_key2,std_dev_key1,std_dev_key2
+			print cov_key1_key2/((std_dev_key1)*(std_dev_key2))
+			return cov_key1_key2/(std_dev_key1)/(std_dev_key2)
 		elif key1 == 'Categorical' and key2 == 'Categorical':
 			pass
 		else:
