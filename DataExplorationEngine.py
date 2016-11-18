@@ -97,7 +97,6 @@ class EDA:
 		'''
 		Variable Identification - Continuous or Categorical
 		'''
-		
 		distinct_count = self.get_distinct_count(key,collname)
 		total_count = self.get_total_count(key,collname)
 		ratio_unique = round((float(distinct_count) / total_count) * 100,2)
@@ -154,7 +153,6 @@ class EDA:
 	def cursor_to_list(self, cursor):
 		return 	[_ for _ in cursor]
 
-
 	''' Get Missing Count '''
 	def getMissingCount(self, key, missing_type):
 		if type(missing_type) == list:
@@ -167,12 +165,12 @@ class EDA:
 
 	# Complete This Function
 	def get_outliers(self, key, collname, thresholds = [0.05,0.95]):
-		docs = self.cursor_to_list(Get().get_documents(collname))
-		key_docs = [doc[key] for doc in docs]
+		key_docs = self.get_all_values(key,collname)
 		q1 = self.get_pth_quantile(key_docs,thresholds[0])
 		q2 = self.get_pth_quantile(key_docs,thresholds[1])
+		std_dev_away = self.get_std_dev_away(key,collname,key_docs)
 		print q1,q2,key_docs
-		if any(not((q1 < val) and (val < q2)) for val in key_docs):
+		if (any(not((q1 < val) and (val < q2)) for val in key_docs)) and std_dev_away:
 			return True
 		return False
 	
@@ -180,21 +178,43 @@ class EDA:
 		p_index = int(p * len(x))
 		return sorted(x)[p_index]
 	
+	def get_std_dev_away(self, key, collname, datapoints):
+		std_dev = self.get_std_dev(key,collname)
+		mean = self.get_mean(key,collname)
+		boundary = mean + 3 * abs(std_dev)
+		if all((point <= boundary for point in datapoints)):
+			return False
+		return True
+
+	def get_all_values(self, key, collname):
+		'''
+			get all values of a column
+			
+			params:
+			key : column name
+			collname : collection name
+		'''
+		docs = self.cursor_to_list(Get().get_documents(collname))
+		docs = [doc[key] for doc in docs]
+		return docs
+
+	def get_mean(self, key, collname):
+		list_dict = self.get_all_values(key,collname)
+		pipe = [{'$group' : {'_id' : key, 'mean':{'$avg':'$'+key}}}]
+		mean = db[collname].aggregate(pipe)
+		mean = self.cursor_to_list(mean)
+		mean = mean[0]['mean']
+		print 'mean',mean
+		return mean
+
 	def de_mean(self, key, collname):
 		'''
 			function to return the difference of list values and their mean
 		'''
-	
-		list_key=db[collname].find()
-		list_dict=self.cursor_to_list(list_key)
-		pipe = [{'$group' : {'_id' : key, 'mean':{'$avg':'$'+key}}}]
-		mean = db[collname].aggregate(pipe)
-		mean=self.cursor_to_list(mean)
-		mean=mean[0]['mean']
-		print 'mean',mean
-		print [each[key] for each in list_dict]
-		return [(each[key]-mean) for each in list_dict]
-
+		list_dict = self.get_all_values(key,collname)
+		mean = self.get_mean(key,collname)
+		# print [each for each in list_dict]
+		return [(each-mean) for each in list_dict]
 
 	def dot(self, list1, list2):
 		'''
@@ -230,14 +250,11 @@ class EDA:
 			std_dev_key2=self.get_std_dev(key2,collname)
 			freq=db[collname].find().count()
 			cov_key1_key2=self.dot(self.de_mean(key1,collname),self.de_mean(key2,collname))/(freq-1)
-			print cov_key1_key2,std_dev_key1,std_dev_key2
-			print cov_key1_key2/((std_dev_key1)*(std_dev_key2))
 			return cov_key1_key2/(std_dev_key1)/(std_dev_key2)
 		elif key1 == 'Categorical' and key2 == 'Categorical':
 			pass
 		else:
-			pass
-
+			
  		sorter = -1
 		if sorting_order != "DESC":
 			sorter = 1
@@ -284,8 +301,6 @@ class EDA:
 		binslist = [bins[each] for each in bins]
 		sortedbins = sorted(binslist, key=lambda k: k['bucket_name']) 
 		return sortedbins
-
-
 
 	def createBinsBiVariate(self, listofdicts, key1, window_size1, scaler1, key2, window_size2, scaler2):
 		bins = {}

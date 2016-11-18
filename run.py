@@ -17,8 +17,10 @@ key = "Species" #key can be any variable
 # uni = eda.univariate_analysis(key,"irisdata", central_tendencies = False)
 # vis.create_univariate_table(uni, key)
 
+collname = "irisdata"
 key1 = "SepalLength"
 key2 = "SepalWidth"
-group_key = "Species"
-bi = eda.bivariate_analysis(key1, key2, "irisdata")
+# bi = eda.bivariate_analysis(key1, key2, collname)
+# print 'std_dev',eda.get_std_dev(key1,collname)
+# print 'outlier detection',eda.get_outliers(key1,collname)
 # vis.createBiTable(bi, key1, key2)
