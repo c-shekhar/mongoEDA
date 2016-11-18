@@ -138,6 +138,7 @@ class EDA:
 			pipe.append({'$limit':limit})
 		res = db[collname].aggregate(pipe)
 		res = self.cursor_to_list(res)
+		print res
 		return res 
 
 	def get_distinct(self, key):
@@ -193,6 +194,7 @@ class EDA:
 	
 		res = db[collname].aggregate(pipe)
 		res = self.cursor_to_list(res)
+		print res
 		return res 
 
 	def createBins(self, listofdicts, key, window_size, scaler):
